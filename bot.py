@@ -1,4 +1,5 @@
 import os
+import json
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -12,18 +13,20 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN is None:
     raise ValueError("Missing discord token.")
 
+# minified json string
 FIREBASE_CERTIFICATE = os.getenv("FIREBASE_CERTIFICATE")
 if FIREBASE_CERTIFICATE is None:
-    raise ValueError("Missing FIREBASE_CERTIFICATE path.")
+    raise ValueError("Missing FIREBASE_CERTIFICATE config.")
 
-# initialize firebase admin with the service account
-cred = credentials.Certificate(FIREBASE_CERTIFICATE)
+# initialize firebase admin
+firebase_config = json.loads(FIREBASE_CERTIFICATE)
+cred = credentials.Certificate(firebase_config)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # bot setup
 intents = discord.Intents.default()
-intents.message_content = True  # Needed for message content access
+intents.message_content = True
 bot = commands.Bot(command_prefix='!ezloot ', intents=intents)
 
 # list of valid gear slots
