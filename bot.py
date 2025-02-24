@@ -13,10 +13,13 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN is None:
     raise ValueError("Missing discord token.")
 
-# minified json string
 FIREBASE_CERTIFICATE = os.getenv("FIREBASE_CERTIFICATE")
 if FIREBASE_CERTIFICATE is None:
     raise ValueError("Missing FIREBASE_CERTIFICATE config.")
+
+# sanitize and parse the firebase certificate
+firebase_config_str = FIREBASE_CERTIFICATE.strip().replace("\n", "")
+firebase_config = json.loads(firebase_config_str)
 
 # initialize firebase admin
 firebase_config = json.loads(FIREBASE_CERTIFICATE)
