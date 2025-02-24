@@ -24,7 +24,7 @@ user_gear = {}
 user_loot = {}
 
 # list of valid gear slots
-GEAR_SLOTS = ["Head", "Chest", "Gloves", "Legs", "Boots", "Neck", "Belt", "Ring 1", "Ring 2"]
+GEAR_SLOTS = ["Head", "Cloak", "Chest", "Gloves", "Legs", "Boots", "Necklace", "Belt", "Ring 1", "Ring 2"]
 
 # admin ids (replace with actual discord ids)
 ADMIN_IDS = {123456789012345678}  # example admin id
@@ -33,12 +33,24 @@ def is_admin(ctx):
     """Check if the invoking user is an admin by ID or has administrator permissions."""
     return ctx.author.id in ADMIN_IDS or (ctx.guild is not None and ctx.author.guild_permissions.administrator)
 
-
 # bot events
 @bot.event
 async def on_ready():
     print(f"EZLoot bot is online as {bot.user}.")
 
+# Global error handler to catch unknown commands and missing parameters
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.send(f"{ctx.author.mention} That command does not exist. Please check your command and try again.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"{ctx.author.mention} Missing required argument. Please check your command and try again.")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(f"{ctx.author.mention} One or more arguments are invalid. Please check your command and try again.")
+    else:
+        # Log the error in the console and send a generic error message to the user.
+        print(f"Unhandled error: {error}")
+        await ctx.send(f"{ctx.author.mention} An error occurred while processing your command.")
 
 # user commands
 
@@ -127,7 +139,6 @@ async def show_gear(ctx):
         message += f"**{slot}**: {item} ({status})\n"
     await ctx.send(message)
 
-
 # admin commands
 
 @bot.command(name="listusers")
@@ -198,16 +209,6 @@ async def assign_loot(ctx, user: discord.Member, slot: str):
     loot_entry = f"{slot}: {user_slot['item']}"
     user_loot.setdefault(user.id, []).append(loot_entry)
     await ctx.send(f"Loot assigned to {user.mention} for **{slot}**: **{user_slot['item']}**.")
-
-@bot.command(name="viewloot")
-@commands.check(is_admin)
-async def view_loot(ctx, user: discord.Member):
-    """Admin: View all loot that a specified user has received."""
-    loot_list = user_loot.get(user.id, [])
-    if not loot_list:
-        await ctx.send(f"{user.mention} has not received any loot.")
-    else:
-        await ctx.send(f"{user.mention} has received:\n" + "\n".join(loot_list))
 
 @bot.command(name="guildtotal")
 @commands.check(is_admin)
