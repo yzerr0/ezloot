@@ -26,7 +26,7 @@
 
 
    - `!ezloot edit <slot> <new_item>`
-     - `<slot>` - 
+     - `<slot>` - Specified gear slot
 4. **showgear**
    - Displays user's current gear entries for all slots
 
