@@ -1,4 +1,4 @@
-# EST Loot Bot &gt;:)
+# EZLoot Bot - EST &gt;:)
 
 ## **Setup**
 
@@ -10,28 +10,39 @@
 ### User
 
 1. **register**
+
    - Registers the user by initializing their gear slots
 
-
    - `!ezloot register`
+
 2. **set**
+
    - Records an item for the specified gear slot for a registered user
 
-
    - `!ezloot set <slot> <item>`
+
      - `<slot>` - Gear slot (case-insensitive) which can be any from: **head - cloak - chest - gloves - legs - boots - necklace - belt - ring 1 - ring 2**
-     - `<item>` - Item to record for specified spot - (***SPELLING MATTERS!!!!!!!!!!!!!!!****)*
+     - `<item>` - Item to record for specified spot - (***SPELLING AND PUNCTUATION MATTERS!!!!!!!!!!!!!!!****)*
+
 3. **edit**
+
    - Allows a user to update an exiisting gear entry if slot is not locked
 
-
    - `!ezloot edit <slot> <new_item>`
+
      - `<slot>` - Specified gear slot
+
 4. **showgear**
+
    - Displays user's current gear entries for all slots
 
+   - `!ezloot showgear`
 
-   - `!ezloot showgear` 
+5. **showloot**
+
+   - Displays loot records for specified user or user invoking the command if no parameter is provided
+   - `!ezloot showloot [@User]`
+     - `@User` (optional) - If provided shows loot for that user, otherwise shows command invoker
 
 ### Admin
 
@@ -54,7 +65,3 @@
 5. **guildtotal**
    - Shows the total count of loot pieces awarded to all users combined
    - `!ezloot guildtotal`
-6. **showloot**
-   - Displays loot records for specified user or user invoking the command if no parameter is provided
-   - `!ezloot showloot [@User]`
-     - `@User` (optional) - If provided shows loot for that user, otherwise shows command invoker

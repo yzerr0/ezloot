@@ -181,7 +181,7 @@ async def show_gear(ctx):
 @bot.command(name="showloot")
 async def show_loot(ctx, user: discord.Member = None):
     """
-    Show loot for a specific user.
+    Show receievd loot for a specific user.
     If no user is provided, show loot for the author.
     """
     target = user if user else ctx.author
