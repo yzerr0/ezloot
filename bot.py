@@ -22,7 +22,6 @@ firebase_config_str = FIREBASE_CERTIFICATE.strip().replace("\n", "")
 firebase_config = json.loads(firebase_config_str)
 
 # initialize firebase admin
-firebase_config = json.loads(FIREBASE_CERTIFICATE)
 cred = credentials.Certificate(firebase_config)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
