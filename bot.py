@@ -17,25 +17,36 @@ FIREBASE_CERTIFICATE = os.getenv("FIREBASE_CERTIFICATE")
 if FIREBASE_CERTIFICATE is None:
     raise ValueError("Missing FIREBASE_CERTIFICATE config.")
 
-# sanitize and parse the firebase certificate
-firebase_config_str = FIREBASE_CERTIFICATE.strip().replace("\n", "")
-firebase_config = json.loads(firebase_config_str)
-
-# initialize firebase admin
-cred = credentials.Certificate(firebase_config)
+# initialize firebase admin with the service account using the file path stored in FIREBASE_CERTIFICATE
+cred = credentials.Certificate(FIREBASE_CERTIFICATE)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!ezloot ', intents=intents)
+bot = commands.Bot(command_prefix='!ezdev ', intents=intents)
 
 # list of valid gear slots
 GEAR_SLOTS = ["Head", "Cloak", "Chest", "Gloves", "Legs", "Boots", "Necklace", "Belt", "Ring 1", "Ring 2"]
 
 # admin id (replace with actual discord ids)
-ADMIN_IDS = {123456789012345678}  # example admin id
+ADMIN_IDS = set()
+
+async def load_admin_ids():
+    """
+    Load admin IDs from Firestore.
+    Assumes a document at config/admins with a field "ids" containing an array of IDs.
+    """
+    global ADMIN_IDS
+    doc_ref = db.collection("config").document("admins")
+    doc = await asyncio.to_thread(doc_ref.get)
+    if doc.exists:
+        data = doc.to_dict()
+        ids = data.get("ids", [])
+        ADMIN_IDS = set(int(i) for i in ids)
+    else:
+        ADMIN_IDS = set()
 
 def is_admin(ctx):
     """Check if the invoking user is an admin by ID or has administrator permissions."""
@@ -51,7 +62,7 @@ async def get_user(user_id: str):
     return None
 
 async def register_user(user_id: str, username: str):
-    """Register a new user with default gear and empty loot."""
+    """Register a new user with default gear, empty loot, and empty temploot."""
     doc_ref = db.collection("users").document(user_id)
     doc = await asyncio.to_thread(doc_ref.get)
     if doc.exists:
@@ -59,7 +70,8 @@ async def register_user(user_id: str, username: str):
     data = {
         "username": username,
         "gear": {slot: {"item": None, "looted": False} for slot in GEAR_SLOTS},
-        "loot": []
+        "loot": [],
+        "temploot": []  # new field for temporary loot
     }
     await asyncio.to_thread(doc_ref.set, data)
     return True
@@ -74,14 +86,40 @@ async def lock_gear_slot(user_id: str, slot: str):
     doc_ref = db.collection("users").document(user_id)
     await asyncio.to_thread(doc_ref.update, {f"gear.{slot}.looted": True})
 
+async def unlock_gear_slot(user_id: str, slot: str):
+    """Unlock a gear slot (mark loot as not assigned)."""
+    doc_ref = db.collection("users").document(user_id)
+    await asyncio.to_thread(doc_ref.update, {f"gear.{slot}.looted": False})
+
 async def add_loot(user_id: str, loot_entry: str):
     """Add a loot entry to the user's record using Firestore's ArrayUnion."""
     doc_ref = db.collection("users").document(user_id)
     await asyncio.to_thread(doc_ref.update, {"loot": firestore.ArrayUnion([loot_entry])})
 
+async def add_temploot(user_id: str, temploot_entry: str):
+    """Add a temporary loot entry to the user's record using Firestore's ArrayUnion."""
+    doc_ref = db.collection("users").document(user_id)
+    await asyncio.to_thread(doc_ref.update, {"temploot": firestore.ArrayUnion([temploot_entry])})
+
+async def remove_gear_item(user_id: str, slot: str):
+    """Remove the gear item for a given slot (reset it to None and unlock it)."""
+    doc_ref = db.collection("users").document(user_id)
+    await asyncio.to_thread(doc_ref.update, {f"gear.{slot}.item": None, f"gear.{slot}.looted": False})
+
+async def remove_loot(user_id: str, loot_entry: str):
+    """Remove a loot entry from the user's record using Firestore's ArrayRemove."""
+    doc_ref = db.collection("users").document(user_id)
+    await asyncio.to_thread(doc_ref.update, {"loot": firestore.ArrayRemove([loot_entry])})
+
+async def remove_temploot(user_id: str, temploot_entry: str):
+    """Remove a temporary loot entry from the user's record using Firestore's ArrayRemove."""
+    doc_ref = db.collection("users").document(user_id)
+    await asyncio.to_thread(doc_ref.update, {"temploot": firestore.ArrayRemove([temploot_entry])})
+
 # bot events
 @bot.event
 async def on_ready():
+    await load_admin_ids()
     print(f"EZLoot bot is online as {bot.user}.")
 
 @bot.event
@@ -186,19 +224,29 @@ async def show_gear(ctx):
 @bot.command(name="showloot")
 async def show_loot(ctx, user: discord.Member = None):
     """
-    Show receievd loot for a specific user.
+    Show received loot for a specific user.
     If no user is provided, show loot for the author.
     """
     target = user if user else ctx.author
     user_id = str(target.id)
     user_data = await get_user(user_id)
-    if not user_data or not user_data.get("loot"):
-        await ctx.send(f"{target.mention} has not received any loot.")
+    if not user_data:
+        await ctx.send(f"{target.mention} is not registered.")
         return
-    loot_list = user_data.get("loot")
-    await ctx.send(f"{target.mention} has received:\n" + "\n".join(loot_list))
+    normal_loot = user_data.get("loot", [])
+    temp_loot = user_data.get("temploot", [])
+    response = f"{target.mention} has received:\n"
+    if normal_loot:
+        response += "**Loot:**\n" + "\n".join(normal_loot) + "\n"
+    else:
+        response += "No regular loot assigned.\n"
+    if temp_loot:
+        response += "\n**Temp Loot:**\n" + "\n".join(temp_loot)
+    else:
+        response += "\nNo temporary loot assigned."
+    await ctx.send(response)
 
-# admin commands
+# Admin commands
 
 @bot.command(name="listusers")
 @commands.check(is_admin)
@@ -278,6 +326,83 @@ async def assign_loot(ctx, user: discord.Member, slot: str):
     await add_loot(user_id, loot_entry)
     await ctx.send(f"Loot assigned to {user.mention} for **{slot}**: **{slot_data['item']}**.")
 
+@bot.command(name="assigntemploot")
+@commands.check(is_admin)
+async def assign_temploot(ctx, user: discord.Member, slot: str, *, loot: str):
+    """
+    Admin: Assign temporary loot to a user.
+    The temploot entry tracks the slot and loot name.
+    Usage: !ezloot assigntemploot @User <slot> <loot>
+    """
+    user_id = str(user.id)
+    user_data = await get_user(user_id)
+    if not user_data:
+        await ctx.send(f"{user.mention} is not registered.")
+        return
+    slot = slot.capitalize()
+    if slot not in GEAR_SLOTS:
+        await ctx.send(f"{ctx.author.mention}, `{slot}` is not a valid gear slot. Valid slots: {', '.join(GEAR_SLOTS)}")
+        return
+    temploot_entry = f"{slot}: {loot}"
+    await add_temploot(user_id, temploot_entry)
+    await ctx.send(f"Temporary loot assigned to {user.mention} for **{slot}**: **{loot}**.")
+
+@bot.command(name="unlock")
+@commands.check(is_admin)
+async def unlock(ctx, user: discord.Member, slot: str):
+    """Admin: Unlock a gear slot for a user."""
+    user_id = str(user.id)
+    user_data = await get_user(user_id)
+    if not user_data:
+        await ctx.send(f"{user.mention} is not registered.")
+        return
+    slot = slot.capitalize()
+    if slot not in GEAR_SLOTS:
+        await ctx.send(f"{ctx.author.mention}, `{slot}` is not a valid gear slot. Valid slots: {', '.join(GEAR_SLOTS)}")
+        return
+    await unlock_gear_slot(user_id, slot)
+    await ctx.send(f"{user.mention}'s **{slot}** slot has been unlocked.")
+
+@bot.command(name="removegear")
+@commands.check(is_admin)
+async def remove_gear(ctx, user: discord.Member, slot: str):
+    """Admin: Remove the gear item for a specific slot from a user's record (reset it)."""
+    user_id = str(user.id)
+    user_data = await get_user(user_id)
+    if not user_data:
+        await ctx.send(f"{user.mention} is not registered.")
+        return
+    slot = slot.capitalize()
+    if slot not in GEAR_SLOTS:
+        await ctx.send(f"{ctx.author.mention}, `{slot}` is not a valid gear slot.")
+        return
+    await remove_gear_item(user_id, slot)
+    await ctx.send(f"Gear for slot **{slot}** has been removed for {user.mention}.")
+
+@bot.command(name="removeloot")
+@commands.check(is_admin)
+async def remove_loot_cmd(ctx, user: discord.Member, *, loot_entry: str):
+    """Admin: Remove a specific loot entry from a user's record."""
+    user_id = str(user.id)
+    user_data = await get_user(user_id)
+    if not user_data:
+        await ctx.send(f"{user.mention} is not registered.")
+        return
+    await remove_loot(user_id, loot_entry)
+    await ctx.send(f"Loot entry '{loot_entry}' has been removed from {user.mention}'s record.")
+
+@bot.command(name="removetemploot")
+@commands.check(is_admin)
+async def remove_temploot_cmd(ctx, user: discord.Member, *, temploot_entry: str):
+    """Admin: Remove a specific temporary loot entry from a user's record."""
+    user_id = str(user.id)
+    user_data = await get_user(user_id)
+    if not user_data:
+        await ctx.send(f"{user.mention} is not registered.")
+        return
+    await remove_temploot(user_id, temploot_entry)
+    await ctx.send(f"Temporary loot entry '{temploot_entry}' has been removed from {user.mention}'s record.")
+
 @bot.command(name="guildtotal")
 @commands.check(is_admin)
 async def guild_total(ctx):
@@ -291,6 +416,30 @@ async def guild_total(ctx):
         loot = data.get("loot", [])
         total_loot += len(loot)
     await ctx.send(f"The guild has received a total of **{total_loot}** loot pieces.")
+
+@bot.command(name="commands")
+async def help_command(ctx):
+    """Display a list of all user and admin commands."""
+    help_text = (
+        "**User Commands:**\n"
+        "`!ezloot register` - Register yourself and initialize your gear.\n"
+        "`!ezloot set <slot> <item>` - Record an item for a specific gear slot.\n"
+        "`!ezloot edit <slot> <new_item>` - Edit the recorded item for a specific gear slot.\n"
+        "`!ezloot showgear` - Display your currently recorded gear.\n"
+        "`!ezloot showloot [@User]` - Show loot for yourself or a specified user.\n"
+        "`!ezloot commands` - Show this help message.\n\n"
+        "**Admin Commands:**\n"
+        "`!ezloot listusers` - List all registered users.\n"
+        "`!ezloot finditem <item>` - Find users with a specified item in their gear.\n"
+        "`!ezloot assignloot @User <slot>` - Assign loot to a user for a specific gear slot (locks the slot).\n"
+        "`!ezloot assigntemploot @User <slot> <loot>` - Assign temporary loot to a user.\n"
+        "`!ezloot unlock @User <slot>` - Unlock a gear slot for a user.\n"
+        "`!ezloot removegear @User <slot>` - Remove/reset a gear slot for a user.\n"
+        "`!ezloot removeloot @User <loot_entry>` - Remove a loot entry from a user's record.\n"
+        "`!ezloot removetemploot @User <temploot_entry>` - Remove a temporary loot entry from a user's record.\n"
+        "`!ezloot guildtotal` - Show the total count of loot pieces awarded across all users.\n"
+    )
+    await ctx.send(help_text)
 
 # run the bot
 bot.run(TOKEN)
