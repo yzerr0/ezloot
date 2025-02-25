@@ -277,6 +277,7 @@ async def help_command(ctx):
         "`!ezloot edit <slot> <new_item>` - Edit the recorded item for a specific gear slot.\n"
         "`!ezloot showgear` - Display your currently recorded gear.\n"
         "`!ezloot showloot [@User]` - Show loot for yourself or a specified user.\n\n"
+        "`!ezloot commands` - Show this help message."
         "**Admin Commands:**\n"
         "`!ezloot listusers` - List all registered users.\n"
         "`!ezloot finditem <item>` - Find users with a specified item in their gear (substring matching).\n"
@@ -287,7 +288,6 @@ async def help_command(ctx):
         "`!ezloot removeloot @User <slot>` - Remove the loot entry for a specified slot from a user's record.\n"
         "`!ezloot removebonusloot @User <slot>` - Remove the bonus loot entry for a specified slot from a user's record.\n"
         "`!ezloot guildtotal` - Show the total count of loot pieces awarded across all users.\n"
-        "`!ezloot commands` - Show this help message."
     )
     await ctx.send(help_text)
 
