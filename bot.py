@@ -17,20 +17,24 @@ FIREBASE_CERTIFICATE = os.getenv("FIREBASE_CERTIFICATE")
 if FIREBASE_CERTIFICATE is None:
     raise ValueError("Missing FIREBASE_CERTIFICATE config.")
 
-# initialize firebase admin with the service account using the file path stored in FIREBASE_CERTIFICATE
-cred = credentials.Certificate(FIREBASE_CERTIFICATE)
+# sanitize and parse the firebase certificate
+firebase_config_str = FIREBASE_CERTIFICATE.strip().replace("\n", "")
+firebase_config = json.loads(firebase_config_str)
+
+# initialize firebase admin
+cred = credentials.Certificate(firebase_config)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!ezdev ', intents=intents)
+bot = commands.Bot(command_prefix='!ezloot ', intents=intents)
 
 # list of valid gear slots
 GEAR_SLOTS = ["Head", "Cloak", "Chest", "Gloves", "Legs", "Boots", "Necklace", "Belt", "Ring 1", "Ring 2"]
 
-# admin id (replace with actual discord ids)
+# admin ids
 ADMIN_IDS = set()
 
 async def load_admin_ids():
@@ -52,6 +56,19 @@ def is_admin(ctx):
     """Check if the invoking user is an admin by ID or has administrator permissions."""
     return ctx.author.id in ADMIN_IDS or (ctx.guild is not None and ctx.author.guild_permissions.administrator)
 
+# helper function to generate a canonical loot entry (for both regular and bonus loot)
+def canonical_loot_entry(slot: str, item: str) -> str:
+    """
+    Generate a canonical loot entry.
+    Ensures the slot is capitalized and the item is lowercased and stripped of extra spaces.
+    Format: "Slot: item"
+    """
+    return f"{slot.strip().capitalize()}: {item.strip().lower()}"
+
+# optional helper to normalize an item string for searching
+def normalize_item(item: str) -> str:
+    return item.strip().lower()
+
 # firestore helper functions
 async def get_user(user_id: str):
     """Retrieve the user document from Firestore."""
@@ -62,7 +79,7 @@ async def get_user(user_id: str):
     return None
 
 async def register_user(user_id: str, username: str):
-    """Register a new user with default gear, empty loot, and empty temploot."""
+    """Register a new user with default gear, empty loot, and empty bonus loot."""
     doc_ref = db.collection("users").document(user_id)
     doc = await asyncio.to_thread(doc_ref.get)
     if doc.exists:
@@ -71,7 +88,7 @@ async def register_user(user_id: str, username: str):
         "username": username,
         "gear": {slot: {"item": None, "looted": False} for slot in GEAR_SLOTS},
         "loot": [],
-        "temploot": []  # new field for temporary loot
+        "bonusloot": [] 
     }
     await asyncio.to_thread(doc_ref.set, data)
     return True
@@ -96,10 +113,10 @@ async def add_loot(user_id: str, loot_entry: str):
     doc_ref = db.collection("users").document(user_id)
     await asyncio.to_thread(doc_ref.update, {"loot": firestore.ArrayUnion([loot_entry])})
 
-async def add_temploot(user_id: str, temploot_entry: str):
-    """Add a temporary loot entry to the user's record using Firestore's ArrayUnion."""
+async def add_bonusloot(user_id: str, bonusloot_entry: str):
+    """Add a bonus loot entry to the user's record using Firestore's ArrayUnion."""
     doc_ref = db.collection("users").document(user_id)
-    await asyncio.to_thread(doc_ref.update, {"temploot": firestore.ArrayUnion([temploot_entry])})
+    await asyncio.to_thread(doc_ref.update, {"bonusloot": firestore.ArrayUnion([bonusloot_entry])})
 
 async def remove_gear_item(user_id: str, slot: str):
     """Remove the gear item for a given slot (reset it to None and unlock it)."""
@@ -111,10 +128,10 @@ async def remove_loot(user_id: str, loot_entry: str):
     doc_ref = db.collection("users").document(user_id)
     await asyncio.to_thread(doc_ref.update, {"loot": firestore.ArrayRemove([loot_entry])})
 
-async def remove_temploot(user_id: str, temploot_entry: str):
-    """Remove a temporary loot entry from the user's record using Firestore's ArrayRemove."""
+async def remove_bonusloot(user_id: str, bonusloot_entry: str):
+    """Remove a bonus loot entry from the user's record using Firestore's ArrayRemove."""
     doc_ref = db.collection("users").document(user_id)
-    await asyncio.to_thread(doc_ref.update, {"temploot": firestore.ArrayRemove([temploot_entry])})
+    await asyncio.to_thread(doc_ref.update, {"bonusloot": firestore.ArrayRemove([bonusloot_entry])})
 
 # bot events
 @bot.event
@@ -214,11 +231,9 @@ async def show_gear(ctx):
         await ctx.send(f"{ctx.author.mention}, you are not registered yet. Use `!ezloot register` first.")
         return
     gear = user_data.get("gear", {})
-    message = f"{ctx.author.mention}'s gear:\n"
-    for slot, data in gear.items():
-        status = "Locked" if data.get("looted") else "Editable"
-        item = data.get("item") if data.get("item") is not None else "Not set"
-        message += f"**{slot}**: {item} ({status})\n"
+    # formatted output for gear
+    lines = [f"**{slot}**: {data.get('item', 'Not set')} — {'Locked' if data.get('looted') else 'Editable'}" for slot, data in gear.items()]
+    message = f"**{ctx.author.name}'s Gear:**\n" + "\n".join(lines)
     await ctx.send(message)
 
 @bot.command(name="showloot")
@@ -234,19 +249,49 @@ async def show_loot(ctx, user: discord.Member = None):
         await ctx.send(f"{target.mention} is not registered.")
         return
     normal_loot = user_data.get("loot", [])
-    temp_loot = user_data.get("temploot", [])
-    response = f"{target.mention} has received:\n"
+    bonus_loot = user_data.get("bonusloot", [])
+    
+    response_lines = [f"**{target.name}'s Loot:**"]
     if normal_loot:
-        response += "**Loot:**\n" + "\n".join(normal_loot) + "\n"
+        response_lines.append("**Regular Loot:**")
+        response_lines.extend(f"- {entry}" for entry in normal_loot)
     else:
-        response += "No regular loot assigned.\n"
-    if temp_loot:
-        response += "\n**Temp Loot:**\n" + "\n".join(temp_loot)
+        response_lines.append("No regular loot assigned.")
+    
+    response_lines.append("")  # blank line separator
+    if bonus_loot:
+        response_lines.append("**Bonus Loot:**")
+        response_lines.extend(f"- {entry}" for entry in bonus_loot)
     else:
-        response += "\nNo temporary loot assigned."
-    await ctx.send(response)
+        response_lines.append("No bonus loot assigned.")
+    
+    await ctx.send("\n".join(response_lines))
+    
+@bot.command(name="commands")
+async def help_command(ctx):
+    """Display a list of all user and admin commands."""
+    help_text = (
+        "**User Commands:**\n"
+        "`!ezloot register` - Register yourself and initialize your gear.\n"
+        "`!ezloot set <slot> <item>` - Record an item for a specific gear slot.\n"
+        "`!ezloot edit <slot> <new_item>` - Edit the recorded item for a specific gear slot.\n"
+        "`!ezloot showgear` - Display your currently recorded gear.\n"
+        "`!ezloot showloot [@User]` - Show loot for yourself or a specified user.\n\n"
+        "**Admin Commands:**\n"
+        "`!ezloot listusers` - List all registered users.\n"
+        "`!ezloot finditem <item>` - Find users with a specified item in their gear (substring matching).\n"
+        "`!ezloot assignloot @User <slot>` - Assign loot to a user for a specific gear slot (locks the slot).\n"
+        "`!ezloot assignbonusloot @User <slot> <loot>` - Assign bonus loot to a user.\n"
+        "`!ezloot unlock @User <slot>` - Unlock a gear slot for a user.\n"
+        "`!ezloot removegear @User <slot>` - Reset a gear slot for a user.\n"
+        "`!ezloot removeloot @User <slot>` - Remove the loot entry for a specified slot from a user's record.\n"
+        "`!ezloot removebonusloot @User <slot>` - Remove the bonus loot entry for a specified slot from a user's record.\n"
+        "`!ezloot guildtotal` - Show the total count of loot pieces awarded across all users.\n"
+        "`!ezloot commands` - Show this help message."
+    )
+    await ctx.send(help_text)
 
-# Admin commands
+# admin commands
 
 @bot.command(name="listusers")
 @commands.check(is_admin)
@@ -258,23 +303,23 @@ async def list_users(ctx):
     if not docs:
         await ctx.send("No users registered yet.")
         return
-    message = "Registered Users:\n"
+    message_lines = ["**Registered Users:**"]
     for doc in docs:
         data = doc.to_dict()
         user_id = doc.id
         try:
             user = await bot.fetch_user(int(user_id))
-            message += f"- {user.name} ({user_id})\n"
+            message_lines.append(f"- {user.name} ({user_id})")
         except Exception:
-            message += f"- Unknown User ({user_id})\n"
-    await ctx.send(message)
+            message_lines.append(f"- Unknown User ({user_id})")
+    await ctx.send("\n".join(message_lines))
 
 @bot.command(name="finditem")
 @commands.check(is_admin)
 async def find_item(ctx, *, item: str):
     """
     Admin: Find users who have recorded a specific item in any gear slot.
-    The check is case-insensitive.
+    Uses substring matching (case-insensitive) so that partial matches work.
     """
     def fetch_users():
         return list(db.collection("users").stream())
@@ -284,7 +329,7 @@ async def find_item(ctx, *, item: str):
         data = doc.to_dict()
         gear = data.get("gear", {})
         for slot_data in gear.values():
-            if slot_data.get("item") and slot_data.get("item").lower() == item.lower():
+            if slot_data.get("item") and item.lower() in slot_data.get("item").strip().lower():
                 try:
                     user = await bot.fetch_user(int(doc.id))
                     found_users.append(user.name)
@@ -292,9 +337,9 @@ async def find_item(ctx, *, item: str):
                     found_users.append(f"UserID {doc.id}")
                 break
     if not found_users:
-        await ctx.send(f"No users found with item **{item}**.")
+        await ctx.send(f"No users found with item containing **{item}**.")
     else:
-        await ctx.send(f"Users with item **{item}**: {', '.join(found_users)}")
+        await ctx.send(f"Users with item containing **{item}**: {', '.join(found_users)}")
 
 @bot.command(name="assignloot")
 @commands.check(is_admin)
@@ -321,18 +366,19 @@ async def assign_loot(ctx, user: discord.Member, slot: str):
     if slot_data.get("looted"):
         await ctx.send(f"{user.mention}'s **{slot}** item has already been awarded.")
         return
+    # use canonical loot entry
+    loot_entry = canonical_loot_entry(slot, slot_data['item'])
     await lock_gear_slot(user_id, slot)
-    loot_entry = f"{slot}: {slot_data['item']}"
     await add_loot(user_id, loot_entry)
     await ctx.send(f"Loot assigned to {user.mention} for **{slot}**: **{slot_data['item']}**.")
 
-@bot.command(name="assigntemploot")
+@bot.command(name="assignbonusloot")
 @commands.check(is_admin)
-async def assign_temploot(ctx, user: discord.Member, slot: str, *, loot: str):
+async def assign_bonusloot(ctx, user: discord.Member, slot: str, *, loot: str):
     """
-    Admin: Assign temporary loot to a user.
-    The temploot entry tracks the slot and loot name.
-    Usage: !ezloot assigntemploot @User <slot> <loot>
+    Admin: Assign bonus loot to a user.
+    The bonus loot entry tracks the slot and loot name.
+    Usage: !ezloot assignbonusloot @User <slot> <loot>
     """
     user_id = str(user.id)
     user_data = await get_user(user_id)
@@ -343,9 +389,9 @@ async def assign_temploot(ctx, user: discord.Member, slot: str, *, loot: str):
     if slot not in GEAR_SLOTS:
         await ctx.send(f"{ctx.author.mention}, `{slot}` is not a valid gear slot. Valid slots: {', '.join(GEAR_SLOTS)}")
         return
-    temploot_entry = f"{slot}: {loot}"
-    await add_temploot(user_id, temploot_entry)
-    await ctx.send(f"Temporary loot assigned to {user.mention} for **{slot}**: **{loot}**.")
+    bonus_entry = canonical_loot_entry(slot, loot)
+    await add_bonusloot(user_id, bonus_entry)
+    await ctx.send(f"Bonus loot assigned to {user.mention} for **{slot}**: **{loot}**.")
 
 @bot.command(name="unlock")
 @commands.check(is_admin)
@@ -377,31 +423,54 @@ async def remove_gear(ctx, user: discord.Member, slot: str):
         await ctx.send(f"{ctx.author.mention}, `{slot}` is not a valid gear slot.")
         return
     await remove_gear_item(user_id, slot)
-    await ctx.send(f"Gear for slot **{slot}** has been removed for {user.mention}.")
+    await ctx.send(f"Gear for slot **{slot}** has been reset for {user.mention}.")
 
 @bot.command(name="removeloot")
 @commands.check(is_admin)
-async def remove_loot_cmd(ctx, user: discord.Member, *, loot_entry: str):
-    """Admin: Remove a specific loot entry from a user's record."""
+async def remove_loot_cmd(ctx, user: discord.Member, slot: str):
+    """
+    Admin: Remove the loot entry corresponding to a specific slot from a user's record.
+    This command finds all loot entries in the 'loot' array that match the canonical format for the given slot.
+    """
     user_id = str(user.id)
     user_data = await get_user(user_id)
     if not user_data:
         await ctx.send(f"{user.mention} is not registered.")
         return
-    await remove_loot(user_id, loot_entry)
-    await ctx.send(f"Loot entry '{loot_entry}' has been removed from {user.mention}'s record.")
+    slot = slot.capitalize()
+    loot_list = user_data.get("loot", [])
+    # use canonical prefix for matching
+    prefix = f"{slot}: "
+    entries_to_remove = [entry for entry in loot_list if entry.startswith(prefix)]
+    if not entries_to_remove:
+        await ctx.send(f"No loot entry found for slot **{slot}** in {user.mention}'s record.")
+        return
+    for entry in entries_to_remove:
+        await remove_loot(user_id, entry)
+    await ctx.send(f"Loot entry for slot **{slot}** has been removed from {user.mention}'s record.")
 
-@bot.command(name="removetemploot")
+@bot.command(name="removebonusloot")
 @commands.check(is_admin)
-async def remove_temploot_cmd(ctx, user: discord.Member, *, temploot_entry: str):
-    """Admin: Remove a specific temporary loot entry from a user's record."""
+async def remove_bonusloot_cmd(ctx, user: discord.Member, slot: str):
+    """
+    Admin: Remove the bonus loot entry corresponding to a specific slot from a user's record.
+    This command finds all bonus loot entries in the 'bonusloot' array that match the canonical format for the given slot.
+    """
     user_id = str(user.id)
     user_data = await get_user(user_id)
     if not user_data:
         await ctx.send(f"{user.mention} is not registered.")
         return
-    await remove_temploot(user_id, temploot_entry)
-    await ctx.send(f"Temporary loot entry '{temploot_entry}' has been removed from {user.mention}'s record.")
+    slot = slot.capitalize()
+    bonus_list = user_data.get("bonusloot", [])
+    prefix = f"{slot}: "
+    entries_to_remove = [entry for entry in bonus_list if entry.startswith(prefix)]
+    if not entries_to_remove:
+        await ctx.send(f"No bonus loot entry found for slot **{slot}** in {user.mention}'s record.")
+        return
+    for entry in entries_to_remove:
+        await remove_bonusloot(user_id, entry)
+    await ctx.send(f"Bonus loot entry for slot **{slot}** has been removed from {user.mention}'s record.")
 
 @bot.command(name="guildtotal")
 @commands.check(is_admin)
@@ -414,32 +483,9 @@ async def guild_total(ctx):
     for doc in docs:
         data = doc.to_dict()
         loot = data.get("loot", [])
-        total_loot += len(loot)
+        bonus = data.get("bonusloot", [])
+        total_loot += len(loot) + len(bonus)
     await ctx.send(f"The guild has received a total of **{total_loot}** loot pieces.")
-
-@bot.command(name="commands")
-async def help_command(ctx):
-    """Display a list of all user and admin commands."""
-    help_text = (
-        "**User Commands:**\n"
-        "`!ezloot register` - Register yourself and initialize your gear.\n"
-        "`!ezloot set <slot> <item>` - Record an item for a specific gear slot.\n"
-        "`!ezloot edit <slot> <new_item>` - Edit the recorded item for a specific gear slot.\n"
-        "`!ezloot showgear` - Display your currently recorded gear.\n"
-        "`!ezloot showloot [@User]` - Show loot for yourself or a specified user.\n"
-        "`!ezloot commands` - Show this help message.\n\n"
-        "**Admin Commands:**\n"
-        "`!ezloot listusers` - List all registered users.\n"
-        "`!ezloot finditem <item>` - Find users with a specified item in their gear.\n"
-        "`!ezloot assignloot @User <slot>` - Assign loot to a user for a specific gear slot (locks the slot).\n"
-        "`!ezloot assigntemploot @User <slot> <loot>` - Assign temporary loot to a user.\n"
-        "`!ezloot unlock @User <slot>` - Unlock a gear slot for a user.\n"
-        "`!ezloot removegear @User <slot>` - Remove/reset a gear slot for a user.\n"
-        "`!ezloot removeloot @User <loot_entry>` - Remove a loot entry from a user's record.\n"
-        "`!ezloot removetemploot @User <temploot_entry>` - Remove a temporary loot entry from a user's record.\n"
-        "`!ezloot guildtotal` - Show the total count of loot pieces awarded across all users.\n"
-    )
-    await ctx.send(help_text)
 
 # run the bot
 bot.run(TOKEN)
