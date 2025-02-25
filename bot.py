@@ -320,26 +320,33 @@ async def find_item(ctx, *, item: str):
     """
     Admin: Find users who have recorded a specific item in any gear slot.
     Uses substring matching (case-insensitive) so that partial matches work.
+    Displays each user's name along with the gear slot and full item name that match.
     """
     def fetch_users():
         return list(db.collection("users").stream())
     docs = await asyncio.to_thread(fetch_users)
-    found_users = []
+    results = []
+    # normalize search term
+    search_term = item.strip().lower()
     for doc in docs:
         data = doc.to_dict()
         gear = data.get("gear", {})
-        for slot_data in gear.values():
-            if slot_data.get("item") and item.lower() in slot_data.get("item").strip().lower():
-                try:
-                    user = await bot.fetch_user(int(doc.id))
-                    found_users.append(user.name)
-                except Exception:
-                    found_users.append(f"UserID {doc.id}")
-                break
-    if not found_users:
+        matches = []
+        for slot, slot_data in gear.items():
+            item_value = slot_data.get("item")
+            if item_value and search_term in item_value.strip().lower():
+                # append formatted text
+                matches.append(f"{slot}: {item_value.strip()}")
+        if matches:
+            try:
+                user = await bot.fetch_user(int(doc.id))
+                results.append(f"{user.name} - " + ", ".join(matches))
+            except Exception:
+                results.append(f"UserID {doc.id} - " + ", ".join(matches))
+    if not results:
         await ctx.send(f"No users found with item containing **{item}**.")
     else:
-        await ctx.send(f"Users with item containing **{item}**: {', '.join(found_users)}")
+        await ctx.send("Matches found:\n" + "\n".join(results))
 
 @bot.command(name="assignloot")
 @commands.check(is_admin)
