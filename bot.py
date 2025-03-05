@@ -29,7 +29,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!ezdev ", intents=intents)
 bot.remove_command("help")
 
-GEAR_SLOTS = ["Head", "Cloak", "Chest", "Gloves", "Legs", "Boots", "Necklace", "Belt", "Ring1", "Ring2"]
+GEAR_SLOTS = ["Head", "Cloak", "Chest", "Gloves", "Legs", "Boots", "Necklace", "Belt", "Ring1", "Ring2", "Weapon1", "Weapon2"]
 
 # global admin ids
 ADMIN_IDS = set()
@@ -80,10 +80,11 @@ async def send_logs_periodically():
                 except Exception as e:
                     print("Error sending log message:", e)
             INTERACTION_LOGS.clear()
-        await asyncio.sleep(900)  # posts logs every 15 minutes
+        await asyncio.sleep(300)  # posts logs every 5 minutes
 
 @bot.event
 async def setup_hook():
+    await load_admin_ids()
     asyncio.create_task(send_logs_periodically())
 
 # helper functions
@@ -216,7 +217,7 @@ async def remove_bonusloot(user_id: str, bonusloot_entry: str):
     doc_ref = db.collection("users").document(user_id)
     await asyncio.to_thread(doc_ref.update, {"bonusloot": firestore.ArrayRemove([bonusloot_entry])})
 
-# bot event handlers
+# bot event handlers    
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
@@ -317,17 +318,34 @@ async def edit_item(ctx, slot: str, *, new_item: str):
 
 @bot.command(name="showgear")
 @commands.check(dm_only_check)
-async def show_gear(ctx):
-    """(DM only for non-admins) Display your currently recorded gear along with lock status."""
-    user_id = str(ctx.author.id)
+async def show_gear(ctx, *, user_identifier: str = None):
+    """
+    Display gear.
+    - Non-admins: shows your own gear.
+    - Admins: if you supply a user identifier (mention, user ID, or username),
+      this command will display that user's gear.
+    """
+    if user_identifier and is_admin(ctx):
+        target = await resolve_member(ctx, user_identifier)
+        if target is None:
+            await ctx.send(f"Could not resolve user '{user_identifier}'.")
+            return
+    else:
+        target = ctx.author
+
+    user_id = str(target.id)
     user_data = await get_user(user_id)
     if not user_data:
-        await ctx.send("You are not registered yet. Use `!ezloot register` in the public channel.")
+        await ctx.send(f"{target.mention} is not registered.")
         return
+
     gear = user_data.get("gear", {})
-    lines = [f"**{slot}**: {data.get('item', 'Not set')} — {'Locked' if data.get('looted') else 'Editable'}" for slot, data in gear.items()]
-    message = f"**{ctx.author.name}'s Gear:**\n" + "\n".join(lines)
+    # Build the formatted gear lines.
+    lines = [f"**{slot}**: {data.get('item', 'Not set')} — {'Locked' if data.get('looted') else 'Unlocked'}" 
+             for slot, data in gear.items()]
+    message = f"**{target.name}'s Gear:**\n" + "\n".join(lines)
     await ctx.send(message)
+
 
 @bot.command(name="showloot")
 @commands.check(dm_only_check)
@@ -377,7 +395,7 @@ async def user_help(ctx):
         "`!ezloot set <slot> <item>` - Record an item for a specific gear slot.\n"
         "`!ezloot edit <slot> <new_item>` - Edit the recorded item for a specific gear slot.\n"
         "`!ezloot showgear` - Display your currently recorded gear.\n"
-        "`!ezloot showloot [user_identifier]` - Show loot for yourself or for a specified user (if you are an admin).\n"
+        "`!ezloot showloot` - Show loot for yourself.\n"
     )
     await ctx.send(help_text)
 
@@ -409,7 +427,7 @@ async def find_item(ctx, *, item: str):
     """
     Admin: Find users who have recorded a specific item in any gear slot.
     Uses substring matching (case-insensitive) so that partial matches work.
-    Displays each user's name along with the gear slot and full item name that match.
+    Displays each user's name along with the gear slot, full item name, and its locked status.
     """
     def fetch_users():
         return list(db.collection("users").stream())
@@ -423,7 +441,8 @@ async def find_item(ctx, *, item: str):
         for slot, slot_data in gear.items():
             item_value = slot_data.get("item")
             if item_value and search_term in item_value.strip().lower():
-                matches.append(f"{slot}: {item_value.strip()}")
+                status = "Locked" if slot_data.get("looted") else "Unlocked"
+                matches.append(f"{slot} ({status}): {item_value.strip()}")
         if matches:
             try:
                 user = await bot.fetch_user(int(doc.id))
@@ -434,6 +453,37 @@ async def find_item(ctx, *, item: str):
         await ctx.send(f"No users found with item containing **{item}**.")
     else:
         await ctx.send("Matches found:\n" + "\n".join(results))
+       
+@bot.command(name="findbonusloot")
+@commands.check(is_admin)
+async def find_bonusloot(ctx, *, item: str):
+    """
+    Admin: Find users who have a bonus loot entry containing a specific string.
+    Uses substring matching (case-insensitive) and displays each user's name along with matching bonus loot entries.
+    """
+    def fetch_users():
+        return list(db.collection("users").stream())
+    docs = await asyncio.to_thread(fetch_users)
+    results = []
+    search_term = item.strip().lower()
+    for doc in docs:
+        data = doc.to_dict()
+        bonus_list = data.get("bonusloot", [])
+        matches = []
+        for entry in bonus_list:
+            if search_term in entry.strip().lower():
+                matches.append(entry.strip())
+        if matches:
+            try:
+                user = await bot.fetch_user(int(doc.id))
+                results.append(f"{user.name} - " + ", ".join(matches))
+            except Exception:
+                results.append(f"UserID {doc.id} - " + ", ".join(matches))
+    if not results:
+        await ctx.send(f"No users found with bonus loot containing **{item}**.")
+    else:
+        await ctx.send("Matches found:\n" + "\n".join(results))
+
 
 @bot.command(name="assignloot")
 @commands.check(is_admin)
