@@ -641,6 +641,36 @@ async def remove_bonusloot_cmd(ctx, user_identifier: str, slot: str):
         await remove_bonusloot(user_id, entry)
     await ctx.send(f"Bonus loot entry for slot **{slot}** has been removed from {member.mention}'s record.")
     await log_interaction(ctx.author, "removebonusloot", f"Removed bonus loot for {member.name} ({slot})")
+    
+@bot.command(name="removeuser")
+@commands.check(is_admin)
+async def remove_user(ctx, user_identifier: str):
+    """
+    Admin: Remove a user from the database (non-admin users only).
+    Usage: !ezdev removeuser <user_identifier>
+    (User identifier can be a mention, user ID, or username.)
+    
+    This command will not remove users that are recognized as administrators.
+    """
+    member = await resolve_member(ctx, user_identifier)
+    if member is None:
+        await ctx.send(f"Could not resolve user '{user_identifier}'.")
+        return
+
+    # prevents removal of administrators
+    if member.id in ADMIN_IDS or (ctx.guild is not None and member.guild_permissions.administrator):
+        await ctx.send("Cannot remove an administrator from the database.")
+        return
+
+    user_id = str(member.id)
+    doc_ref = db.collection("users").document(user_id)
+    doc = await asyncio.to_thread(doc_ref.get)
+    if not doc.exists:
+        await ctx.send(f"{member.mention} is not registered in the database.")
+        return
+    await asyncio.to_thread(doc_ref.delete)
+    await ctx.send(f"User {member.mention} has been removed from the database.")
+    await log_interaction(ctx.author, "removeuser", f"Removed user {member.name} ({user_id}) from the database.")
 
 @bot.command(name="guildtotal")
 @commands.check(is_admin)
@@ -663,16 +693,18 @@ async def admin_help(ctx):
     """Admin: Display a list of all admin commands."""
     help_text = (
         "**Admin Commands:**\n"
-        "!ezloot listusers - List all registered users.\n"
-        "!ezloot finditem <item> - Find users with a specified item in their gear (substring matching).\n"
-        "!ezloot assignloot <user_identifier> <slot> - Assign loot to a user for a specific gear slot (locks the slot).\n"
-        "!ezloot assignbonusloot <user_identifier> <slot> <loot> - Assign bonus loot to a user.\n"
-        "!ezloot unlock <user_identifier> <slot> - Unlock a gear slot for a user.\n"
-        "!ezloot removegear <user_identifier> <slot> - Reset a gear slot for a user.\n"
-        "!ezloot removeloot <user_identifier> <slot> - Remove the loot entry for a specified slot from a user's record.\n"
-        "!ezloot removebonusloot <user_identifier> <slot> - Remove the bonus loot entry for a specified slot from a user's record.\n"
-        "!ezloot guildtotal - Show the total count of loot pieces awarded across all users.\n"
-        "!ezloot admincommands - Show this help message.\n"
+        "`!ezloot listusers` - List all registered users.\n"
+        "`!ezloot finditem <item>` - Find users with a specified item in their gear (substring matching) and display lock status.\n"
+        "`!ezloot findbonusloot <item>` - Find users with bonus loot entries containing a specified string.\n"
+        "`!ezloot assignloot <user_identifier> <slot>` - Assign loot to a user for a specific gear slot (locks the slot).\n"
+        "`!ezloot assignbonusloot <user_identifier> <slot> <loot>` - Assign bonus loot to a user.\n"
+        "`!ezloot unlock <user_identifier> <slot>` - Unlock a gear slot for a user.\n"
+        "`!ezloot removegear <user_identifier> <slot>` - Reset a gear slot for a user.\n"
+        "`!ezloot removeloot <user_identifier> <slot>` - Remove the loot entry for a specified slot from a user's record.\n"
+        "`!ezloot removebonusloot <user_identifier> <slot>` - Remove the bonus loot entry for a specified slot from a user's record.\n"
+        "`!ezloot removeuser <user_identifier>` - Remove a user from the database (non-admin users only).\n"
+        "`!ezloot guildtotal` - Show the total count of loot pieces awarded across all users.\n"
+        "`!ezloot admincommands` - Show this help message.\n"
     )
     await ctx.send(help_text)
 
