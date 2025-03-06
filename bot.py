@@ -8,7 +8,7 @@ from firebase_admin import credentials, firestore
 import asyncio
 import datetime
 
-# load env & firebase credentials
+# load environment variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN is None:
@@ -16,17 +16,21 @@ if TOKEN is None:
 
 FIREBASE_CERTIFICATE = os.getenv("FIREBASE_CERTIFICATE")
 if FIREBASE_CERTIFICATE is None:
-    raise ValueError("Missing FIREBASE_CERTIFICATE path.")
+    raise ValueError("Missing FIREBASE_CERTIFICATE config.")
 
-# initialize firebase
-cred = credentials.Certificate(FIREBASE_CERTIFICATE)
+# sanitize and parse the firebase certificate
+firebase_config_str = FIREBASE_CERTIFICATE.strip().replace("\n", "")
+firebase_config = json.loads(firebase_config_str)
+
+# initialize firebase admin
+cred = credentials.Certificate(firebase_config)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!ezdev ", intents=intents)
+bot = commands.Bot(command_prefix='!ezloot ', intents=intents)
 bot.remove_command("help")
 
 GEAR_SLOTS = ["Head", "Cloak", "Chest", "Gloves", "Legs", "Boots", "Necklace", "Belt", "Ring1", "Ring2", "Weapon1", "Weapon2"]
