@@ -33,7 +33,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!ezloot ', intents=intents)
 bot.remove_command("help")
 
-GEAR_SLOTS = ["Head", "Cloak", "Chest", "Gloves", "Legs", "Boots", "Necklace", "Belt", "Ring1", "Ring2", "Weapon1", "Weapon2"]
+GEAR_SLOTS = ["Head", "Cloak", "Chest", "Gloves", "Legs", "Boots", "Necklace", "Bracelet", "Belt", "Ring1", "Ring2", "Weapon1", "Weapon2"]
 
 # global admin ids
 ADMIN_IDS = set()
