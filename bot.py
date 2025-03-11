@@ -663,7 +663,7 @@ async def remove_user(ctx, user_identifier: str):
         return
 
     # prevents removal of administrators
-    if member.id in ADMIN_IDS or (ctx.guild is not None and member.guild_permissions.administrator):
+    if member.id in ADMIN_IDS or (hasattr(member, 'guild_permissions') and member.guild_permissions.administrator):
         await ctx.send("Cannot remove an administrator from the database.")
         return
 
