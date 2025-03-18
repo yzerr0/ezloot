@@ -1,6 +1,4 @@
 # cogs/admin_commands.py
-
-import discord
 from discord.ext import commands
 import asyncio
 
@@ -283,7 +281,7 @@ class AdminCommands(commands.Cog):
             await ctx.send(f"Could not resolve user '{user_identifier}'.")
             return
         
-        if member.id in ADMIN_IDS or (ctx.guild is not None and member.guild_permissions.administrator):
+        if member.id in ADMIN_IDS or (hasattr(member, 'guild_permissions') and member.guild_permissions.administrator):
             await ctx.send("Cannot remove an administrator from the database.")
             return
 

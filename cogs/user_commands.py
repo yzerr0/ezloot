@@ -1,5 +1,4 @@
 # cogs/user_commands.py
-
 import discord
 from discord.ext import commands
 from utils.db import get_user, register_user, update_gear_item, is_admin

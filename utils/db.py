@@ -5,7 +5,6 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from utils.config import FIREBASE_CERTIFICATE, GEAR_SLOTS
 
-# Initialize Firebase if not already initialized.
 if not firebase_admin._apps:
     cred = credentials.Certificate(FIREBASE_CERTIFICATE)
     firebase_admin.initialize_app(cred)
