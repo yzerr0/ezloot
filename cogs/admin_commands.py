@@ -8,7 +8,7 @@ remove_bonusloot, is_admin, ADMIN_IDS, get_db, update_gear_item)
 
 from utils.helpers import canonical_loot_entry, resolve_member
 from utils.config import GEAR_SLOTS
-from utils.logging import log_interaction
+from utils.logging import log_interaction, format_user
 
 class AdminCommands(commands.Cog):
     def __init__(self, bot):
@@ -29,11 +29,10 @@ class AdminCommands(commands.Cog):
             return
         message_lines = ["**Registered Users:**"]
         for doc in docs:
-            data = doc.to_dict()
             user_id = doc.id
             try:
                 user = await self.bot.fetch_user(int(doc.id))
-                message_lines.append(f"- {user.name} ({user_id})")
+                message_lines.append(f"- {format_user(user)} [{user_id}]")
             except Exception:
                 message_lines.append(f"- Unknown User ({user_id})")
         await ctx.send("\n".join(message_lines))
@@ -63,7 +62,7 @@ class AdminCommands(commands.Cog):
             if matches:
                 try:
                     user = await self.bot.fetch_user(int(doc.id))
-                    results.append(f"{user.name} - " + ", ".join(matches))
+                    results.append(f"{format_user(user)} - " + ", ".join(matches))
                 except Exception:
                     results.append(f"UserID {doc.id} - " + ", ".join(matches))
         if not results:
@@ -93,7 +92,7 @@ class AdminCommands(commands.Cog):
             if matches:
                 try:
                     user = await self.bot.fetch_user(int(doc.id))
-                    results.append(f"{user.name} - " + ", ".join(matches))
+                    results.append(f"{format_user(user)} - " + ", ".join(matches))
                 except Exception:
                     results.append(f"UserID {doc.id} - " + ", ".join(matches))
         if not results:
@@ -102,12 +101,12 @@ class AdminCommands(commands.Cog):
             await ctx.send("Matches found:\n" + "\n".join(results))
 
     @commands.command(name="assignloot")
-    async def assign_loot(self, ctx, user_identifier: str, slot: str):
+    async def assign_loot(self, ctx, user_identifier: str, slot: str, source: str = None):
         """
         Admin: Assign loot to a user based on one of their recorded gear items.
         Once assigned, that gear slot becomes locked.
+        Optionally, specify the source (e.g., WB, GR) to indicate where the loot was obtained.
         Usage: !ezloot assignloot <user_identifier> <slot>
-        (User identifier can be a mention, user ID, or username.)
         """
         member = await resolve_member(ctx, user_identifier)
         if member is None:
@@ -116,7 +115,7 @@ class AdminCommands(commands.Cog):
         user_id = str(member.id)
         user_data = await get_user(user_id)
         if not user_data:
-            await ctx.send(f"{member.mention} is not registered.")
+            await ctx.send(f"{format_user(member)} is not registered.")
             return
         slot = slot.capitalize()
         if slot not in GEAR_SLOTS:
@@ -125,17 +124,19 @@ class AdminCommands(commands.Cog):
         gear = user_data.get("gear", {})
         slot_data = gear.get(slot, {})
         if slot_data.get("item") is None:
-            await ctx.send(f"{member.mention} does not have an item set for **{slot}**.")
+            await ctx.send(f"{format_user(member)} does not have an item set for **{slot}**.")
             return
         if slot_data.get("looted"):
-            await ctx.send(f"{member.mention}'s **{slot}** item has already been awarded.")
+            await ctx.send(f"{format_user(member)}'s **{slot}** item has already been awarded.")
             return
         loot_entry = canonical_loot_entry(slot, slot_data['item'])
+        if source:
+            loot_entry += f" (obtained from {source})"
         await lock_gear_slot(user_id, slot)
         await add_loot(user_id, loot_entry)
-        await ctx.send(f"Loot assigned to {member.mention} for **{slot}**: **{slot_data['item']}**.")
-        await log_interaction(ctx.author, "assignloot", f"Assigned loot for {member.name} ({slot}: {slot_data['item']})")
-
+        await ctx.send(f"Loot assigned to {format_user(member)} for **{slot}**: **{slot_data['item']}**.")
+        await log_interaction(ctx.author, "assignloot", f"Assigned loot for {format_user(member)} ({slot}: {slot_data['item']}){f' from {source}' if source else ''}")
+    
     @commands.command(name="assignbonusloot")
     async def assign_bonusloot(self, ctx, user_identifier: str, slot: str, *, loot: str):
         """
@@ -149,7 +150,7 @@ class AdminCommands(commands.Cog):
         user_id = str(member.id)
         user_data = await get_user(user_id)
         if not user_data:
-            await ctx.send(f"{member.mention} is not registered.")
+            await ctx.send(f"{format_user(member)} is not registered.")
             return
         slot = slot.capitalize()
         if slot not in GEAR_SLOTS:
@@ -157,8 +158,8 @@ class AdminCommands(commands.Cog):
             return
         bonus_entry = canonical_loot_entry(slot, loot)
         await add_bonusloot(user_id, bonus_entry)
-        await ctx.send(f"Bonus loot assigned to {member.mention} for **{slot}**: **{loot}**.")
-        await log_interaction(ctx.author, "assignbonusloot", f"Assigned bonus loot for {member.name} ({slot}: {loot})")
+        await ctx.send(f"Bonus loot assigned to {format_user(member)} for **{slot}**: **{loot}**.")
+        await log_interaction(ctx.author, "assignbonusloot", f"Assigned bonus loot for {format_user(member)} ({slot}: {loot})")
         
     @commands.command(name="addpity")
     async def add_pity_command(self, ctx, user_identifier: str):
@@ -174,8 +175,8 @@ class AdminCommands(commands.Cog):
         await add_pity(user_id)
         user_data = await get_user(user_id)
         new_pity = user_data.get("pity", 0)
-        await ctx.send(f"Pity level for {member.mention} has been incremented to {new_pity}.")
-        await log_interaction(ctx.author, "addpity", f"Incremented pity for {member.name} to {new_pity}")
+        await ctx.send(f"Pity level for {format_user(member)} has been incremented to {new_pity}.")
+        await log_interaction(ctx.author, "addpity", f"Incremented pity for {format_user(member)} to {new_pity}")
         
     @commands.command(name="setpity")
     async def add_pity_command(self, ctx, user_identifier: str, pity_level: int):
@@ -192,10 +193,8 @@ class AdminCommands(commands.Cog):
         user_data = await get_user(user_id)
         new_pity = user_data.get("pity", 0)
         
-        user_display = member.mention if hasattr(member, 'guild_permissions') else member.name
-        
-        await ctx.send(f"Pity level for {user_display} has been set to {new_pity}.")
-        await log_interaction(ctx.author, "setpity", f"Set pity for {member.name} to {new_pity}")
+        await ctx.send(f"Pity level for {format_user(member)} has been set to {new_pity}.")
+        await log_interaction(ctx.author, "setpity", f"Set pity for {format_user(member)} to {new_pity}")
     
     @commands.command(name="editgear")
     async def edit_gear(self, ctx, user_identifier: str, slot: str, *, new_item: str):
@@ -211,7 +210,7 @@ class AdminCommands(commands.Cog):
         user_id = str(member.id)
         user_data = await get_user(user_id)
         if not user_data:
-            await ctx.send(f"{member.mention} is not registered.")
+            await ctx.send(f"{format_user(member)} is not registered.")
             return
 
         slot = slot.capitalize()
@@ -220,8 +219,8 @@ class AdminCommands(commands.Cog):
             return
        
         await update_gear_item(user_id, slot, new_item)
-        await ctx.send(f"Gear for {member.mention} in slot **{slot}** has been updated to **{new_item}**.")
-        await log_interaction(ctx.author, "editgear", f"Edited gear for {member.name} ({slot}) to {new_item}")
+        await ctx.send(f"Gear for {format_user(member)} in slot **{slot}** has been updated to **{new_item}**.")
+        await log_interaction(ctx.author, "editgear", f"Edited gear for {format_user(member)} ({slot}) to {new_item}")
 
 
     @commands.command(name="unlock")
@@ -234,15 +233,15 @@ class AdminCommands(commands.Cog):
         user_id = str(member.id)
         user_data = await get_user(user_id)
         if not user_data:
-            await ctx.send(f"{member.mention} is not registered.")
+            await ctx.send(f"{format_user(member)} is not registered.")
             return
         slot = slot.capitalize()
         if slot not in GEAR_SLOTS:
             await ctx.send(f"{ctx.author.mention}, `{slot}` is not a valid gear slot. Valid slots: {', '.join(GEAR_SLOTS)}")
             return
         await unlock_gear_slot(user_id, slot)
-        await ctx.send(f"{member.mention}'s **{slot}** slot has been unlocked.")
-        await log_interaction(ctx.author, "unlock", f"Unlocked {member.name}'s {slot} slot")
+        await ctx.send(f"{format_user(member)}'s **{slot}** slot has been unlocked.")
+        await log_interaction(ctx.author, "unlock", f"Unlocked {format_user(member)}'s {slot} slot")
 
     @commands.command(name="removegear")
     async def remove_gear(self, ctx, user_identifier: str, slot: str):
@@ -254,15 +253,15 @@ class AdminCommands(commands.Cog):
         user_id = str(member.id)
         user_data = await get_user(user_id)
         if not user_data:
-            await ctx.send(f"{member.mention} is not registered.")
+            await ctx.send(f"{format_user(member)} is not registered.")
             return
         slot = slot.capitalize()
         if slot not in GEAR_SLOTS:
             await ctx.send(f"{ctx.author.mention}, `{slot}` is not a valid gear slot.")
             return
         await remove_gear_item(user_id, slot)
-        await ctx.send(f"Gear for slot **{slot}** has been reset for {member.mention}.")
-        await log_interaction(ctx.author, "removegear", f"Removed gear for {member.name} ({slot})")
+        await ctx.send(f"Gear for slot **{slot}** has been reset for {format_user(member)}.")
+        await log_interaction(ctx.author, "removegear", f"Removed gear for {format_user(member)} ({slot})")
 
     @commands.command(name="removeloot")
     async def remove_loot_cmd(self, ctx, user_identifier: str, slot: str):
@@ -276,19 +275,19 @@ class AdminCommands(commands.Cog):
         user_id = str(member.id)
         user_data = await get_user(user_id)
         if not user_data:
-            await ctx.send(f"{member.mention} is not registered.")
+            await ctx.send(f"{format_user(member)} is not registered.")
             return
         slot = slot.capitalize()
         loot_list = user_data.get("loot", [])
         prefix = f"{slot}: "
         entries_to_remove = [entry for entry in loot_list if entry.startswith(prefix)]
         if not entries_to_remove:
-            await ctx.send(f"No loot entry found for slot **{slot}** in {member.mention}'s record.")
+            await ctx.send(f"No loot entry found for slot **{slot}** in {format_user(member)}'s record.")
             return
         for entry in entries_to_remove:
             await remove_loot(user_id, entry)
-        await ctx.send(f"Loot entry for slot **{slot}** has been removed from {member.mention}'s record.")
-        await log_interaction(ctx.author, "removeloot", f"Removed loot for {member.name} ({slot})")
+        await ctx.send(f"Loot entry for slot **{slot}** has been removed from {format_user(member)}'s record.")
+        await log_interaction(ctx.author, "removeloot", f"Removed loot for {format_user(member)} ({slot})")
 
     @commands.command(name="removebonusloot")
     async def remove_bonusloot(self, ctx, user_identifier: str, slot: str):
@@ -302,19 +301,19 @@ class AdminCommands(commands.Cog):
         user_id = str(member.id)
         user_data = await get_user(user_id)
         if not user_data:
-            await ctx.send(f"{member.mention} is not registered.")
+            await ctx.send(f"{format_user(member)} is not registered.")
             return
         slot = slot.capitalize()
         bonus_list = user_data.get("bonusloot", [])
         prefix = f"{slot}: "
         entries_to_remove = [entry for entry in bonus_list if entry.startswith(prefix)]
         if not entries_to_remove:
-            await ctx.send(f"No bonus loot entry found for slot **{slot}** in {member.mention}'s record.")
+            await ctx.send(f"No bonus loot entry found for slot **{slot}** in {format_user(member)}'s record.")
             return
         for entry in entries_to_remove:
             await remove_bonusloot(user_id, entry)
-        await ctx.send(f"Bonus loot entry for slot **{slot}** has been removed from {member.mention}'s record.")
-        await log_interaction(ctx.author, "removebonusloot", f"Removed bonus loot for {member.name} ({slot})")
+        await ctx.send(f"Bonus loot entry for slot **{slot}** has been removed from {format_user(member)}'s record.")
+        await log_interaction(ctx.author, "removebonusloot", f"Removed bonus loot for {format_user(member)} ({slot})")
 
     @commands.command(name="removeuser")
     async def remove_user(self, ctx, user_identifier: str):
@@ -339,11 +338,11 @@ class AdminCommands(commands.Cog):
         doc_ref = db.collection("users").document(user_id)
         doc = await asyncio.to_thread(doc_ref.get)
         if not doc.exists:
-            await ctx.send(f"{member.mention} is not registered in the database.")
+            await ctx.send(f"{format_user(member)} is not registered in the database.")
             return
         await asyncio.to_thread(doc_ref.delete)
-        await ctx.send(f"User {member.mention} has been removed from the database.")
-        await log_interaction(ctx.author, "removeuser", f"Removed user {member.name} ({user_id}) from the database.")
+        await ctx.send(f"User {format_user(member)} has been removed from the database.")
+        await log_interaction(ctx.author, "removeuser", f"Removed user {format_user(member)} [{user_id}] from the database.")
 
     @commands.command(name="guildtotal")
     async def guild_total(self, ctx):
@@ -368,8 +367,11 @@ class AdminCommands(commands.Cog):
             "`!ezloot listusers` - List all registered users.\n"
             "`!ezloot finditem <item>` - Find users with a specified item in their gear (substring matching) and display lock status.\n"
             "`!ezloot findbonusloot <item>` - Find users with bonus loot entries containing a specified string.\n"
-            "`!ezloot assignloot <user_identifier> <slot>` - Assign loot to a user for a specific gear slot (locks the slot).\n"
+            "`!ezloot assignloot <user_identifier> <slot> <optional_origin>` - Assign loot to a user for a specific gear slot (locks the slot).\n"
             "`!ezloot assignbonusloot <user_identifier> <slot> <loot>` - Assign bonus loot to a user.\n"
+            "`!ezloot addpity <user_identifier>` - Increment the pity level for a user by 1.\n"
+            "`!ezloot setpity <user_identifier> <pity_level>` - Set the pity level for a user to a specified amount.\n"
+            "`!ezloot editgear <user_identifier> <slot> <new_item>` - Edit a user's gear slot.\n"
             "`!ezloot unlock <user_identifier> <slot>` - Unlock a gear slot for a user.\n"
             "`!ezloot removegear <user_identifier> <slot>` - Reset a gear slot for a user.\n"
             "`!ezloot removeloot <user_identifier> <slot>` - Remove the loot entry for a specified slot from a user's record.\n"

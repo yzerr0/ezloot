@@ -91,6 +91,34 @@ class UserCommands(commands.Cog):
         await update_gear_item(user_id, slot, new_item)
         await ctx.send(f"Your **{slot}** has been updated to **{new_item}**.")
         await log_interaction(ctx.author, "edit", f"Updated {slot} to {new_item}")
+    
+    @commands.command(name="pity")
+    @commands.check(dm_only_check)
+    async def pity(self, ctx, *, user_identifier: str = None):
+        """
+        Show your current pity level.
+        Admins can supply a user identifier (mention, ID, or username) to see that user's pity level.
+        """
+        if user_identifier and is_admin(ctx):
+            target = await resolve_member(ctx, user_identifier)
+            if target is None:
+                await ctx.send(f"Could not resolve user '{user_identifier}'. Showing your own pity level instead.")
+                target = ctx.author
+        else:
+            target = ctx.author
+
+        user_id = str(target.id)
+        user_data = await get_user(user_id)
+        if not user_data:
+            await ctx.send(f"{target.mention} is not registered.")
+            return
+        pity_level = user_data.get("pity", 0)
+        
+        if target == ctx.author:
+            await ctx.send(f"Your pity level is {pity_level}.")
+        else:
+            await ctx.send(f"{target.name}'s pity level is {pity_level}.")
+
 
     @commands.command(name="showgear")
     @commands.check(dm_only_check)
@@ -161,8 +189,9 @@ class UserCommands(commands.Cog):
             "`!ezloot register` - Register yourself and then DM for further commands.\n"
             "`!ezloot set <slot> <item>` - Record an item for a gear slot.\n"
             "`!ezloot edit <slot> <new_item>` - Edit the recorded item for a gear slot.\n"
-            "`!ezloot showgear` - Display your gear (or a specified user's gear if admin).\n"
-            "`!ezloot showloot` - Show your loot (or a specified user's loot if admin).\n"
+            "`!ezloot showgear` - Display your gear.\n"
+            "`!ezloot showloot` - Show your loot.\n"
+            "`!ezloot pity` - Show your current pity level.\n"
         )
         await ctx.send(help_text)
 

@@ -1,14 +1,29 @@
 # utils/logging.py
 import datetime
 import asyncio
+import discord
+from discord.ext import escape_markdown
 from utils.config import LOG_CHANNEL_ID
 
 INTERACTION_LOGS = []
 
+def format_user(user: discord.User) -> str:
+    """
+    Return a formatted string with the user's base username (with markdown escaped)
+    and their mention if available.
+    """
+    try:
+        base_name = escape_markdown(user.name)
+        mention = user.mention if hasattr(user, "mention") else user.name
+        return f"**{base_name}** ({mention})"
+    except Exception:
+        return str(user)
+
 async def log_interaction(user, command_name, details):
     """Log an interaction with a timestamp, the user, command name, and details."""
+    formatted_user = format_user(user)
     timestamp = datetime.datetime.now().isoformat()
-    log_entry = f"[{timestamp}] {user} used {command_name}: {details}"
+    log_entry = f"[{timestamp}] {formatted_user} used **{command_name}**: {details}"
     INTERACTION_LOGS.append(log_entry)
 
 async def send_logs_periodically(bot, interval=5):
