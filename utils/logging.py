@@ -2,7 +2,7 @@
 import datetime
 import asyncio
 import discord
-from discord.ext import escape_markdown
+from discord.utils import escape_markdown
 from utils.config import LOG_CHANNEL_ID
 
 INTERACTION_LOGS = []
