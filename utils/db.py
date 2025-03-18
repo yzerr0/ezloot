@@ -115,3 +115,9 @@ async def add_pity(user_id: str):
     db_instance = get_db()
     doc_ref = db_instance.collection("users").document(user_id)
     await asyncio.to_thread(doc_ref.update, {"pity": firestore.Increment(1)})
+    
+async def set_pity(user_id: str, value: int):
+    """Set the pity level for a user to a specific value."""
+    db_instance = get_db()
+    doc_ref = db_instance.collection("users").document(user_id)
+    await asyncio.to_thread(doc_ref.update, {"pity": value})

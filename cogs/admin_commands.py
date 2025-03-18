@@ -2,7 +2,10 @@
 from discord.ext import commands
 import asyncio
 
-from utils.db import get_user, lock_gear_slot, unlock_gear_slot, add_loot, add_bonusloot, add_pity, remove_gear_item, remove_loot, remove_bonusloot, is_admin, ADMIN_IDS, get_db
+from utils.db import (get_user, lock_gear_slot, unlock_gear_slot, add_loot,
+add_bonusloot, add_pity, set_pity, remove_gear_item, remove_loot, 
+remove_bonusloot, is_admin, ADMIN_IDS, get_db, update_gear_item)
+
 from utils.helpers import canonical_loot_entry, resolve_member
 from utils.config import GEAR_SLOTS
 from utils.logging import log_interaction
@@ -173,6 +176,52 @@ class AdminCommands(commands.Cog):
         new_pity = user_data.get("pity", 0)
         await ctx.send(f"Pity level for {member.mention} has been incremented to {new_pity}.")
         await log_interaction(ctx.author, "addpity", f"Incremented pity for {member.name} to {new_pity}")
+        
+    @commands.command(name="setpity")
+    async def add_pity_command(self, ctx, user_identifier: str, pity_level: int):
+        """
+        Admin: Set the pity level for a user to a specified amount.
+        Usage: !ezloot addpity <user_identifier> <pity_level>
+        """
+        member = await resolve_member(ctx, user_identifier)
+        if member is None:
+            await ctx.send(f"Could not resolve user '{user_identifier}'.")
+            return
+        user_id = str(member.id)
+        await set_pity(user_id, pity_level)
+        user_data = await get_user(user_id)
+        new_pity = user_data.get("pity", 0)
+        
+        user_display = member.mention if hasattr(member, 'guild_permissions') else member.name
+        
+        await ctx.send(f"Pity level for {user_display} has been set to {new_pity}.")
+        await log_interaction(ctx.author, "setpity", f"Set pity for {member.name} to {new_pity}")
+    
+    @commands.command(name="editgear")
+    async def edit_gear(self, ctx, user_identifier: str, slot: str, *, new_item: str):
+        """
+        Admin: Edit another user's gear slot.
+        Usage: !ezloot editgear <user_identifier> <slot> <new_item>
+        """
+        member = await resolve_member(ctx, user_identifier)
+        if member is None:
+            await ctx.send(f"Could not resolve user '{user_identifier}'.")
+            return
+
+        user_id = str(member.id)
+        user_data = await get_user(user_id)
+        if not user_data:
+            await ctx.send(f"{member.mention} is not registered.")
+            return
+
+        slot = slot.capitalize()
+        if slot not in GEAR_SLOTS:
+            await ctx.send(f"{ctx.author.mention}, `{slot}` is not a valid gear slot. Valid slots: {', '.join(GEAR_SLOTS)}")
+            return
+       
+        await update_gear_item(user_id, slot, new_item)
+        await ctx.send(f"Gear for {member.mention} in slot **{slot}** has been updated to **{new_item}**.")
+        await log_interaction(ctx.author, "editgear", f"Edited gear for {member.name} ({slot}) to {new_item}")
 
 
     @commands.command(name="unlock")
