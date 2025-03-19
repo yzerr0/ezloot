@@ -17,7 +17,7 @@ if not firebase_admin._apps:
 # bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!ezdev ", intents=intents)
+bot = commands.Bot(command_prefix="!ezloot ", intents=intents)
 bot.remove_command("help")
 
 # load extensions
