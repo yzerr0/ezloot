@@ -15,6 +15,10 @@ def canonical_loot_entry(slot: str, item: str) -> str:
 def normalize_item(item: str) -> str:
     return item.strip().lower()
 
+def split_message(message: str, max_length: int = 2000):
+        """Splits the message into chunks not exceeding max_length."""
+        return [message[i:i + max_length] for i in range(0, len(message), max_length)]
+
 async def resolve_member(ctx, identifier: str) -> discord.Member:
     """
     Resolve a guild member from an identifier (mention, user ID, or username).

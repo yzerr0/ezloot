@@ -6,7 +6,7 @@ from utils.db import (get_user, lock_gear_slot, unlock_gear_slot, add_loot,
 add_bonusloot, add_pity, set_pity, remove_gear_item, remove_loot, 
 remove_bonusloot, is_admin, ADMIN_IDS, get_db, update_gear_item)
 
-from utils.helpers import canonical_loot_entry, resolve_member
+from utils.helpers import canonical_loot_entry, resolve_member, split_message
 from utils.config import GEAR_SLOTS
 from utils.logging import log_interaction, format_user
 
@@ -35,7 +35,9 @@ class AdminCommands(commands.Cog):
                 message_lines.append(f"- {format_user(user)} [{user_id}]")
             except Exception:
                 message_lines.append(f"- Unknown User ({user_id})")
-        await ctx.send("\n".join(message_lines))
+        full_message = "\n".join(message_lines)
+        for chunk in split_message(full_message):
+            await ctx.send(chunk)
 
     @commands.command(name="finditem")
     async def find_item(self, ctx, *, item: str):

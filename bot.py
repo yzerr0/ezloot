@@ -1,5 +1,6 @@
 # bot.py
 import discord
+import json
 from discord.ext import commands
 import firebase_admin
 from firebase_admin import credentials
@@ -8,7 +9,9 @@ from utils.config import TOKEN, FIREBASE_CERTIFICATE
 
 # load env & firebase credentials
 if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_CERTIFICATE)
+    firebase_config_str = FIREBASE_CERTIFICATE.strip().replace("\n", "")
+    firebase_config = json.loads(firebase_config_str)
+    cred = credentials.Certificate(firebase_config_str)
     firebase_admin.initialize_app(cred)
 
 # bot setup
