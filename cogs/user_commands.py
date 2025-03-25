@@ -142,7 +142,7 @@ class UserCommands(commands.Cog):
                 lines.append(f"🔴 **{slot}**: ~~{item_val}~~")
             else:
                 lines.append(f"🟢 **{slot}**: {item_val}")
-        message = f"**{format_user(target)}'s Gear:**\n" + "\n".join(lines)
+        message = f"{format_user(target)}'s Gear:\n" + "\n".join(lines)
         await ctx.send(message)
 
     @commands.command(name="showloot")
