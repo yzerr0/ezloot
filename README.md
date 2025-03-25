@@ -8,11 +8,11 @@
 pip install -r requirements.txt
 ```
 
-1. **Set environment variables**
+2. **Set environment variables**
    - `DISCORD_TOKEN`
    - `FIREBASE_CERTIFICATE`
    - `LOG_CHANNEL_ID` (optional, for interaction logs)
-2. **Run the bot**
+3. **Run the bot**
 
 ```python
 python bot.py
