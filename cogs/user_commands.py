@@ -145,7 +145,7 @@ class UserCommands(commands.Cog):
         message = f"{format_user(target)}'s Gear:\n" + "\n".join(lines)
         await ctx.send(message)
 
-        @commands.command(name="showloot")
+    @commands.command(name="showloot")
     @commands.check(dm_only_check)
     async def show_loot(self, ctx, *, user_identifier: str = None):
         """
