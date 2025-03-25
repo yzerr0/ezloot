@@ -346,18 +346,39 @@ class AdminCommands(commands.Cog):
 
     @commands.command(name="guildtotal")
     async def guild_total(self, ctx):
-        """Admin: Show the total count of loot pieces awarded across all users."""
-        def fetch_users():
-            from utils.db import db
-            return list(db.collection("users").stream())
-        docs = await asyncio.to_thread(fetch_users)
-        total_loot = 0
+        """Admin: Show a detailed report of loot assignments across all users."""
+        from utils.db import get_db  # use get_db() instead of importing db
+        db_instance = get_db()
+        docs = await asyncio.to_thread(lambda: list(db_instance.collection("users").stream()))
+        report_lines = ["**Guild Loot Report:**"]
         for doc in docs:
             data = doc.to_dict()
-            loot = data.get("loot", [])
-            bonus = data.get("bonusloot", [])
-            total_loot += len(loot) + len(bonus)
-        await ctx.send(f"The guild has received a total of **{total_loot}** loot pieces.")
+            user_id = doc.id
+            try:
+                user = await self.bot.fetch_user(int(user_id))
+                user_display = f"{user.name} ({user.mention})"
+            except Exception:
+                user_display = f"Unknown User ({user_id})"
+            user_loot = data.get("loot", [])
+            bonus_loot = data.get("bonusloot", [])
+            if user_loot or bonus_loot:
+                report_lines.append(f"**{user_display}:**")
+                if user_loot:
+                    report_lines.append("  **Regular Loot:**")
+                    for loot in user_loot:
+                        report_lines.append(f"  - {loot}")
+                if bonus_loot:
+                    report_lines.append("  **Bonus Loot:**")
+                    for loot in bonus_loot:
+                        report_lines.append(f"  - {loot}")
+                report_lines.append("")  # blank line for separation
+        if len(report_lines) == 1:
+            await ctx.send("No loot has been assigned yet.")
+        else:
+            from utils.helpers import split_message  # assuming this helper exists
+            full_report = "\n".join(report_lines)
+            for chunk in split_message(full_report):
+                await ctx.send(chunk)
 
     @commands.command(name="admincommands")
     async def admin_help(self, ctx):
