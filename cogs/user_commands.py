@@ -145,14 +145,14 @@ class UserCommands(commands.Cog):
         message = f"{format_user(target)}'s Gear:\n" + "\n".join(lines)
         await ctx.send(message)
 
-    @commands.command(name="showloot")
+        @commands.command(name="showloot")
     @commands.check(dm_only_check)
     async def show_loot(self, ctx, *, user_identifier: str = None):
         """
         Show received loot.
         Non-admins see their own loot; admins can specify a user.
         """
-        if user_identifier and ctx.author.guild_permissions.administrator:
+        if user_identifier and is_admin(ctx):
             target = await resolve_member(ctx, user_identifier)
             if not target:
                 await ctx.send(f"Could not resolve user '{user_identifier}'.")
