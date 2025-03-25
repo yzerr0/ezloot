@@ -54,7 +54,12 @@ class AdminCommands(commands.Cog):
             for slot, slot_data in gear.items():
                 item_value = slot_data.get("item")
                 if item_value and search_term in item_value.strip().lower():
-                    status_str = "~~" + item_value.strip() + "~~ 🔒" if slot_data.get("looted") else f"{item_value.strip()} 🔓"
+                    if slot_data.get("looted"):
+                        status_str = "~~" + item_value.strip() + "~~"
+                        slot = "🔴 " + slot
+                    else: 
+                        status_str = f"{item_value.strip()}"
+                        slot = "🟢 " + slot
                     matches.append(f"{slot}: {status_str}")
             if matches:
                 try:
