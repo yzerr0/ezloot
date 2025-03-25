@@ -4,7 +4,7 @@ from discord.ext import commands
 from utils.db import get_user, register_user, update_gear_item, is_admin
 from utils.helpers import resolve_member
 from utils.config import GEAR_SLOTS
-from utils.logging import log_interaction
+from utils.logging import log_interaction, format_user
 
 class UserCommands(commands.Cog):
     def __init__(self, bot):
@@ -139,9 +139,9 @@ class UserCommands(commands.Cog):
         for slot, data in gear.items():
             item_val = data.get("item", "Not set")
             if data.get("looted"):
-                lines.append(f"**{slot}**: ~~{item_val}~~ 🔒")
+                lines.append(f"🔴 **{slot}**: ~~{item_val}~~")
             else:
-                lines.append(f"**{slot}**: {item_val} 🔓")
+                lines.append(f"🟢 **{slot}**: {item_val}")
         message = f"**{format_user(target)}'s Gear:**\n" + "\n".join(lines)
         await ctx.send(message)
 
