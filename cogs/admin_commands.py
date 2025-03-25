@@ -41,11 +41,6 @@ class AdminCommands(commands.Cog):
 
     @commands.command(name="finditem")
     async def find_item(self, ctx, *, item: str):
-        """
-        Admin: Find users who have recorded a specific item in any gear slot.
-        Uses substring matching (case-insensitive) so that partial matches work.
-        Displays each user's name along with the gear slot, full item name, and its locked status.
-        """
         def fetch_users():
             db = get_db()
             return list(db.collection("users").stream())
@@ -59,8 +54,8 @@ class AdminCommands(commands.Cog):
             for slot, slot_data in gear.items():
                 item_value = slot_data.get("item")
                 if item_value and search_term in item_value.strip().lower():
-                    status = "Locked" if slot_data.get("looted") else "Unlocked"
-                    matches.append(f"{slot} ({status}): {item_value.strip()}")
+                    status_str = "~~" + item_value.strip() + "~~ 🔒" if slot_data.get("looted") else f"{item_value.strip()} 🔓"
+                    matches.append(f"{slot}: {status_str}")
             if matches:
                 try:
                     user = await self.bot.fetch_user(int(doc.id))
@@ -70,14 +65,12 @@ class AdminCommands(commands.Cog):
         if not results:
             await ctx.send(f"No users found with item containing **{item}**.")
         else:
-            await ctx.send("Matches found:\n" + "\n".join(results))
+            full_message = "Matches found:\n" + "\n".join(results)
+            for chunk in split_message(full_message):
+                await ctx.send(chunk)
 
     @commands.command(name="findbonusloot")
     async def find_bonusloot(self, ctx, *, item: str):
-        """
-        Admin: Find users who have a bonus loot entry containing a specific string.
-        Uses substring matching (case-insensitive) and displays each user's name along with matching bonus loot entries.
-        """
         def fetch_users():
             db = get_db()
             return list(db.collection("users").stream())
@@ -89,8 +82,7 @@ class AdminCommands(commands.Cog):
             bonus_list = data.get("bonusloot", [])
             matches = []
             for entry in bonus_list:
-                if search_term in entry.strip().lower():
-                    matches.append(entry.strip())
+                matches.append(entry.strip())
             if matches:
                 try:
                     user = await self.bot.fetch_user(int(doc.id))
@@ -100,7 +92,9 @@ class AdminCommands(commands.Cog):
         if not results:
             await ctx.send(f"No users found with bonus loot containing **{item}**.")
         else:
-            await ctx.send("Matches found:\n" + "\n".join(results))
+            full_message = "Matches found:\n" + "\n".join(results)
+            for chunk in split_message(full_message):
+                await ctx.send(chunk)
 
     @commands.command(name="assignloot")
     async def assign_loot(self, ctx, user_identifier: str, slot: str, source: str = None):
@@ -223,7 +217,6 @@ class AdminCommands(commands.Cog):
         await update_gear_item(user_id, slot, new_item)
         await ctx.send(f"Gear for {format_user(member)} in slot **{slot}** has been updated to **{new_item}**.")
         await log_interaction(ctx.author, "editgear", f"Edited gear for {format_user(member)} ({slot}) to {new_item}")
-
 
     @commands.command(name="unlock")
     async def unlock(self, ctx, user_identifier: str, slot: str):
