@@ -119,14 +119,9 @@ class UserCommands(commands.Cog):
         else:
             await ctx.send(f"{target.name}'s pity level is {pity_level}.")
 
-
     @commands.command(name="showgear")
     @commands.check(dm_only_check)
     async def show_gear(self, ctx, *, user_identifier: str = None):
-        """
-        Display gear.
-        Non-admins see their own gear; admins can specify a user.
-        """
         if user_identifier and ctx.author.guild_permissions.administrator:
             target = await resolve_member(ctx, user_identifier)
             if not target:
@@ -137,12 +132,17 @@ class UserCommands(commands.Cog):
         user_id = str(target.id)
         user_data = await get_user(user_id)
         if not user_data:
-            await ctx.send(f"{target.mention} is not registered.")
+            await ctx.send(f"{format_user(target)} is not registered.")
             return
         gear = user_data.get("gear", {})
-        lines = [f"**{slot}**: {data.get('item', 'Not set')} — {'Locked' if data.get('looted') else 'Unlocked'}"
-                 for slot, data in gear.items()]
-        message = f"**{target.name}'s Gear:**\n" + "\n".join(lines)
+        lines = []
+        for slot, data in gear.items():
+            item_val = data.get("item", "Not set")
+            if data.get("looted"):
+                lines.append(f"**{slot}**: ~~{item_val}~~ 🔒")
+            else:
+                lines.append(f"**{slot}**: {item_val} 🔓")
+        message = f"**{format_user(target)}'s Gear:**\n" + "\n".join(lines)
         await ctx.send(message)
 
     @commands.command(name="showloot")
