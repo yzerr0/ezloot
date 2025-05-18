@@ -9,7 +9,7 @@ from utils.config import TOKEN, FIREBASE_CERTIFICATE
 
 # load env & firebase credentials
 if not firebase_admin._apps:
-    firebase_config_str = FIREBASE_CERTIFICATE.strip().replace("\\n", "\n")
+    firebase_config_str = FIREBASE_CERTIFICATE.strip().replace("\n", "")
     firebase_config = json.loads(firebase_config_str)
     cred = credentials.Certificate(firebase_config)
     firebase_admin.initialize_app(cred)
