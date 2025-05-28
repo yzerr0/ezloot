@@ -10,6 +10,6 @@ LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")
 
 GEAR_SLOTS = [
     "Head", "Cloak", "Chest", "Gloves", "Legs", "Boots", 
-    "Necklace", "Bracelet", "Belt", "Ring1", "Ring2", 
+    "Earrings", "Necklace", "Bracelet", "Belt", "Ring1", "Ring2", 
     "Weapon1", "Weapon2", "Arch1", "Arch2",
 ]
